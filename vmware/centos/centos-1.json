@@ -1,0 +1,85 @@
+{
+  "variables": {
+    "version": "1.0",
+	  "ssh_name": "vagrant",
+    "ssh_pass": "vagrant",
+    "hostname": "HACCM-1",
+	  "disksize": "8196",
+	  "vsphere_user": "svcvctr-admin@lvdemo.local",
+	  "vsphere_password": "Tr@c321!",
+	  "vsphere_host": "lvpoc-vctr-1.lvpoc.local",
+	  "vsphere_dc": "LVDEMO",
+	  "vsphere_dtstore": "Cloud Tenant DEMO NFS Datastore VCAC",
+	  "vsphere_respl": "",
+	  "esx_host": "lvpoc-vesx-52.lvpoc.local"
+  },
+
+  "builders": [
+
+    {
+      "name": "{{ user `hostname` }}",
+      "vm_name": "{{ user `hostname` }}",
+      "vmdk_name": "{{ user `hostname` }}",
+      "type": "vmware-iso",
+      "boot_command": [
+        "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/scripts/centos-7-kickstart.cfg<enter><wait>"
+      ],
+	    "headless": false,
+      "disk_size":  "{{ user `disksize`}}",
+      "guest_os_type": "rhel7-64",
+      "iso_url": "http://mirrors.advancedhosters.com/centos/7/isos/x86_64/CentOS-7-x86_64-Minimal-1503-01.iso",
+      "iso_checksum": "7c1e34e95c991175290d704dbdcc6531774cbecb",
+      "iso_checksum_type": "sha1",
+      "ssh_username": "{{ user `ssh_name` }}",
+      "ssh_password": "{{ user `ssh_pass` }}",
+      "ssh_wait_timeout": "60m",
+      "shutdown_command": "echo 'vagrant' | sudo -S /sbin/shutdown -P now",
+      "http_directory": ".",
+	    "tools_upload_flavor": "linux",
+      "vmx_data": {
+       "cpuid.coresPerSocket": "1",
+       "memsize": "2048",
+       "numvcpus": "2"
+     }
+    }
+  ],
+
+  "provisioners": [
+    {
+      "type": "shell",
+      "execute_command": "echo 'vagrant' | {{ .Vars }} sudo -E -S sh '{{ .Path }}'",
+      "script": "scripts/centos-vmware-tools_install.sh",
+      "script": "scripts/base.sh",
+      "script": "scripts/vmware.sh",
+      "script": "scripts/installccm.sh"
+    },
+    {
+      "type": "puppet-masterless",
+      "execute_command": "{{.FacterVars}}{{if .Sudo}} echo 'vagrant' | sudo -E -S {{end}} puppet apply --verbose --modulepath='{{.ModulePath}}' {{if ne .HieraConfigPath \"\"}}--hiera_config='{{.HieraConfigPath}}' {{end}} {{if ne .ManifestDir \"\"}}--manifestdir='{{.ManifestDir}}' {{end}} --detailed-exitcodes {{.ManifestFile}}",
+      "manifest_file": "puppet/manifests/vagrant.pp",
+      "manifest_dir": "puppet/manifests",
+      "module_paths": [
+        "puppet/modules"
+      ]
+    },
+    {
+      "type": "shell",
+      "execute_command": "echo 'vagrant' | {{ .Vars }} sudo -E -S sh '{{ .Path }}'",
+      "script": "scripts/cleanup.sh",
+      "script": "scripts/centos-vmware-vcloud_cleanup.sh"
+    }
+  ],
+
+  "post-processors": [
+   {
+     "type": "vagrant-vmware-ovf",
+     "compression_level": 0,
+     "override": {
+       "vmware": {
+         "compression_level": 0
+       }
+     },
+     "output": "{{.BuildName}}-{{.Provider}}-{{user `version`}}.box"
+   }
+ ]
+}
