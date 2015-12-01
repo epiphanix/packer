@@ -1,0 +1,62 @@
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'vcenter'
+
+nodes = []
+
+[*1..2].each do |n|
+  nodes << { hostname: "centos#{n}",
+             box: 'HACCM-1',
+             ip: "10.75.16.#{n}",
+             mem: 1024 * n,
+             cpu: n }
+end
+
+
+
+Vagrant.configure('2') do |config|
+
+  # Go through nodes and configure each of them.
+  nodes.each do |node|
+
+    config.vm.provider :vcenter do |vcenter|
+      vcenter.hostname = '10.75.16.58'
+      vcenter.username = 'svcvctr-admin@lvdemo.local'
+      vcenter.password = 'Tr@c321!'
+      vcenter.folder_name = 'LVDEMO'
+      vcenter.datacenter_name = 'LVDEMO'
+      vcenter.computer_name = 'Resources'
+      vcenter.datastore_name = 'Cloud Tenant DEMO NFS Datastore VCAC'
+      vcenter.network_name = 'Infra-Server-VMs'
+      vcenter.linked_clones = true
+    end
+
+    config.vm.define node[:hostname] do |node_config|
+      node_config.vm.box = node[:box]
+      node_config.vm.hostname = node[:hostname]
+
+      # Let's configure the network for the VM, only the ip changes and is
+      # coming from the nodes array
+      node_config.vm.network :public_network,
+                             ip: node[:ip],
+                             netmask: '255.255.255.0',
+                             gateway: '10.75.16.254',
+                             dns_server_list: ['10.75.16.21', '8.8.8.8'],
+                             dns_suffix_list: ['lvpoc.local']
+
+      # Let's override some provider settings for specific VMs
+      node_config.vm.provider :vcenter do |override|
+        # Override number of cpu and memory based on what's in the nodes array
+        override.num_cpu = node[:cpu]
+        override.memory = node[:mem]
+        case node[:hostname]
+        # Override the folder name based on the hostname of the VM
+        when /centos/
+          override.folder_name = 'Vagrant/centos'
+        when /precise/
+          override.folder_name = 'Vagrant/ubuntu/precise'
+          override.enable_vm_customization = false
+        end
+      end
+      node_config.nfs.functional = false
+    end
+  end
+end
